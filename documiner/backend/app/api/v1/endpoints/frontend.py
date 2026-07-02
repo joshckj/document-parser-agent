@@ -1,7 +1,5 @@
 import os
-import importlib.util
 from pathlib import Path
-from functools import lru_cache
 from typing import Any
 
 import httpx
@@ -9,6 +7,8 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from core.config import settings
+from orchestrator import session_store
+from orchestrator.agent.orchestrator import invoke_deep_agent
 
 
 router = APIRouter()
@@ -16,7 +16,6 @@ router = APIRouter()
 OCR_BASE = os.getenv("OCR_BASE", "https://sp-doc-insight.qa.in.spdigital.sg")
 TIMEOUT = 60.0
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
-ORCHESTRATOR_FILE = Path(__file__).resolve().parents[3] / "orchestrator" / "agent" / "orchestrator.py"
 
 
 class ChatMessage(BaseModel):
@@ -26,12 +25,14 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
 	messages: list[ChatMessage]
+	session_id: str | None = None
 
 
 @router.post("/upload")
 async def upload_document(
 	file: UploadFile = File(..., description="Document file to parse."),
 	message: str | None = Form(default=None),
+	session_id: str | None = Form(default=None),
 ) -> dict:
 	"""Upload a document and proxy it to the parser backend."""
 
@@ -50,23 +51,29 @@ async def upload_document(
 	content_type = file.content_type or _guess_content_type(extension)
 	payload = await _proxy_upload(filename, file_bytes, content_type, message)
 
+	# Cache the full OCR JSON so the chat Extractor subagent can inspect it.
+	if session_id:
+		session_store.set_last_ocr(session_id, payload)
+
 	return {
 		"message": _extract_primary_text(payload),
 		"document": payload,
 		"filename": filename,
+		"session_id": session_id,
 	}
 
 
 @router.post("/chat")
 async def chat_with_document(request: ChatRequest) -> dict:
-	"""Send a plain messages payload to the simple deep agent."""
+	"""Send a plain messages payload to the orchestrator agent."""
 
 	messages = [message.model_dump() for message in request.messages if message.content.strip()]
 	if not messages:
 		raise HTTPException(status_code=400, detail="At least one message is required.")
 
-	assistant_message = await _get_deep_agent().invoke_deep_agent(
+	assistant_message = await invoke_deep_agent(
 		messages=messages,
+		session_id=request.session_id or "",
 		agent_model=settings.agent_model,
 		agent_key=settings.agent_key,
 		agent_base_url=settings.agent_base_url,
@@ -121,14 +128,6 @@ def _extract_primary_text(payload: Any) -> str:
 			if isinstance(value, str) and value.strip():
 				return value
 	return "Document uploaded successfully."
-@lru_cache(maxsize=1)
-def _get_deep_agent() -> Any:
-	spec = importlib.util.spec_from_file_location("documiner_deep_agent", ORCHESTRATOR_FILE)
-	if spec is None or spec.loader is None:
-		raise RuntimeError(f"Unable to load orchestrator from {ORCHESTRATOR_FILE}")
-	module = importlib.util.module_from_spec(spec)
-	spec.loader.exec_module(module)
-	return module
 
 
 def _guess_content_type(extension: str) -> str:

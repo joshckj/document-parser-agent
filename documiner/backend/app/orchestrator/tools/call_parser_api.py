@@ -1,9 +1,12 @@
 import mimetypes
 import os
-from typing import Literal
+from typing import Literal, Optional
 
 import httpx
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
+
+from orchestrator import session_store
 
 OCR_BASE = "https://sp-doc-insight.qa.in.spdigital.sg"
 TIMEOUT = 120.0
@@ -13,6 +16,7 @@ TIMEOUT = 120.0
 async def call_ocr_api(
     file_path: str,
     effort: Literal["low", "medium", "max"] = "low",
+    config: Optional[RunnableConfig] = None,
 ) -> str:
     """
     Extract text and structure from a document using the SP Document Insight OCR API.
@@ -47,4 +51,10 @@ async def call_ocr_api(
         response.raise_for_status()
 
     data = response.json()
+
+    # Cache the full JSON so the Extractor subagent can inspect block_labels.
+    session_id = (config or {}).get("configurable", {}).get("thread_id", "") if config else ""
+    if session_id:
+        session_store.set_last_ocr(session_id, data)
+
     return data.get("MD") or str(data)

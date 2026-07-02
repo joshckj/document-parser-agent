@@ -15,7 +15,7 @@ python-multipart==0.0.28
 h3>=3.7.7
 
 # --- AI & Agent Frameworks ---
-deepagents==0.5.6
+deepagents==0.6.7
 langgraph==1.1.10
 langgraph-checkpoint-postgres==3.0.5
 langchain==1.2.15

@@ -397,6 +397,51 @@
   .summary-val.ok { color: var(--accent); }
   .summary-val.warn { color: var(--warning); }
 
+  /* Extracted content (tables/images) rendered from <<TABLE>> markers */
+  .table-card {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+  }
+
+  .table-card table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text);
+  }
+
+  .table-card th,
+  .table-card td {
+    border: 1px solid var(--border);
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .table-card thead th {
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+
+  .table-card tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+
+  .table-card img { max-width: 100%; height: auto; border-radius: 6px; }
+
+  .table-card .block-text {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-mid);
+    padding: 4px 0;
+    white-space: pre-wrap;
+  }
+
   textarea {
     flex: 1;
     background: var(--bg);
@@ -538,6 +583,9 @@
     : window.location.origin;
   const UPLOAD_URL = `${API_BASE}/upload`;
   const CHAT_URL = `${API_BASE}/chat`;
+  const sessionId = (window.crypto && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `s-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   let isLoading = false;
   let selectedFile = null;
   let chatHistory = [];
@@ -611,6 +659,7 @@
     try {
       const formData = new FormData();
       formData.append("file", selectedFile);
+      formData.append("session_id", sessionId);
       if (note) {
         formData.append("message", note);
       }
@@ -665,7 +714,7 @@
       const response = await fetch(CHAT_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: chatHistory }),
+        body: JSON.stringify({ messages: chatHistory, session_id: sessionId }),
       });
       const data = await parseResponse(response);
 
@@ -714,7 +763,7 @@
 
     const bubble = document.createElement("div");
     bubble.className = `message-bubble ${role}`;
-    bubble.innerHTML = formatText(text);
+    renderMessageContent(bubble, text);
 
     msg.appendChild(header);
     msg.appendChild(bubble);
@@ -933,6 +982,57 @@
     if (size < 1024) return `${size} B`;
     if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
     return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  // ── Render agent content (text + extracted <<TABLE>> HTML blocks) ────────────
+  const TABLE_MARKER_RE = /<<TABLE>>([\s\S]*?)<<END>>/g;
+
+  function renderMessageContent(container, text) {
+    text = text || "";
+    let lastIndex = 0;
+    let match;
+    let sawMarker = false;
+    TABLE_MARKER_RE.lastIndex = 0;
+
+    while ((match = TABLE_MARKER_RE.exec(text)) !== null) {
+      sawMarker = true;
+      const before = text.slice(lastIndex, match.index);
+      if (before.trim()) {
+        const span = document.createElement("div");
+        span.innerHTML = formatText(before);
+        container.appendChild(span);
+      }
+      const card = document.createElement("div");
+      card.className = "table-card";
+      card.innerHTML = sanitizeHtml(match[1]);
+      container.appendChild(card);
+      lastIndex = match.index + match[0].length;
+    }
+
+    const rest = text.slice(lastIndex);
+    if (rest.trim() || !sawMarker) {
+      const span = document.createElement("div");
+      span.innerHTML = formatText(rest);
+      container.appendChild(span);
+    }
+  }
+
+  // Minimal sanitizer for OCR-derived HTML before innerHTML injection.
+  function sanitizeHtml(html) {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = html || "";
+    tpl.content.querySelectorAll("script, style, iframe, object, embed, link, meta")
+      .forEach((el) => el.remove());
+    tpl.content.querySelectorAll("*").forEach((el) => {
+      [...el.attributes].forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const val = (attr.value || "").trim().toLowerCase();
+        if (name.startsWith("on") || ((name === "href" || name === "src") && val.startsWith("javascript:"))) {
+          el.removeAttribute(attr.name);
+        }
+      });
+    });
+    return tpl.innerHTML;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
