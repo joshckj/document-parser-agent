@@ -1,0 +1,15 @@
+services:
+  documiner-backend:
+    build:
+      context: .
+      dockerfile: build/ci/Dockerfile
+    container_name: documiner-backend-1
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: "5000"
+      FAST_ENV: "production"
+      DOCUMINER_PARSE_BASE: "http://host.docker.internal:3000"
+    restart: unless-stopped

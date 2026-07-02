@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Document Parser — SP Digital</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #231c19;
+    --surface: #2d2420;
+    --border: #423630;
+    --accent: #d4a373;
+    --accent-dim: rgba(212, 163, 115, 0.1);
+    --accent-mid: rgba(212, 163, 115, 0.3);
+    --text: #f0e9e4;
+    --text-dim: #9e8e86;
+    --text-mid: #c7b8b0;
+    --danger: #e06666;
+    --warning: #e6b065;
+    --user-bg: #3b302a;
+    --agent-bg: #28201c;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  header {
+    padding: 16px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .logo-icon svg { width: 18px; height: 18px; }
+
+  .logo-text {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .logo-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* Chat area */
+  .chat-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 0;
+    scroll-behavior: smooth;
+  }
+
+  .chat-container::-webkit-scrollbar { width: 4px; }
+  .chat-container::-webkit-scrollbar-track { background: transparent; }
+  .chat-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .message-wrapper {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 0 24px;
+    animation: fadeUp 0.3s ease;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .message {
+    margin-bottom: 24px;
+  }
+
+  .message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .avatar.agent {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    color: var(--accent);
+  }
+
+  .avatar.user {
+    background: #362a24;
+    border: 1px solid #4a3b33;
+    color: var(--text-mid);
+  }
+
+  .sender-name {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+
+  .message-bubble {
+    padding: 14px 18px;
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.7;
+    border: 1px solid transparent;
+  }
+
+  .message-bubble.agent {
+    background: var(--agent-bg);
+    border-color: var(--border);
+    color: var(--text);
+    margin-right: 40px;
+  }
+
+  .message-bubble.user {
+    background: var(--user-bg);
+    border-color: var(--border);
+    color: var(--text-mid);
+    margin-left: 40px;
+  }
+
+  /* Map iframe */
+  .map-container {
+    margin-top: 16px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    height: 400px;
+  }
+
+  .map-container iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  /* CSV download button */
+  .download-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: var(--accent-dim);
+    border: 1px solid var(--accent-mid);
+    border-radius: 8px;
+    color: var(--accent);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+  }
+
+  .download-btn:hover {
+    background: var(--accent-mid);
+  }
+
+  /* Typing indicator */
+  .typing {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 14px 18px;
+    background: var(--agent-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-right: 40px;
+    width: fit-content;
+  }
+
+  .typing span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: typing 1.2s infinite;
+  }
+
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes typing {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30%           { transform: translateY(-4px); opacity: 1; }
+  }
+
+  /* Welcome screen */
+  .welcome {
+    max-width: 780px;
+    margin: 40px auto 0;
+    padding: 0 24px;
+  }
+
+  .welcome-title {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .welcome-title span { color: var(--accent); }
+
+  .welcome-sub {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    line-height: 1.6;
+  }
+
+  /* Input area */
+  .input-area {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 16px 24px;
+    flex-shrink: 0;
+  }
+
+  .input-inner {
+    max-width: 780px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  .attach-btn {
+    min-width: 120px;
+    height: 44px;
+    border-radius: 10px;
+    background: transparent;
+    border: 1px solid var(--accent-mid);
+    color: var(--accent);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 14px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+  }
+
+  .attach-btn:hover {
+    background: var(--accent-dim);
+  }
+
+  .attach-btn:disabled {
+    border-color: var(--border);
+    color: var(--text-dim);
+    cursor: not-allowed;
+  }
+
+  .selected-file {
+    min-height: 18px;
+    font-size: 11px;
+    color: var(--text-mid);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.04em;
+  }
+
+  .result-card {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+  }
+
+  .result-card pre {
+    margin: 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-mid);
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 14px;
+    resize: none;
+    outline: none;
+    min-height: 44px;
+    max-height: 120px;
+    line-height: 1.5;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus { border-color: var(--accent-mid); }
+  textarea::placeholder { color: var(--text-dim); }
+
+  .send-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--accent);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .send-btn:hover { background: #c39262; transform: scale(1.05); }
+  .send-btn:active { transform: scale(0.97); }
+  .send-btn:disabled { background: var(--border); cursor: not-allowed; transform: none; }
+
+  .send-btn svg { width: 18px; height: 18px; }
+
+  .input-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+
+  /* Error message */
+  .error-bubble {
+    padding: 10px 14px;
+    background: #2b1c1a;
+    border: 1px solid #4a2824;
+    border-radius: 8px;
+    color: var(--danger);
+    font-size: 13px;
+    font-family: 'JetBrains Mono', monospace;
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+        <path d="M12 6v6l4 2"/>
+      </svg>
+    </div>
+    <div>
+      <div class="logo-text">Document Parser</div>
+      <div class="logo-sub">SP DIGITAL · OCR EXTRACTION</div>
+    </div>
+  </div>
+  <div class="status-pill">
+    <div class="status-dot"></div>
+    ONLINE
+  </div>
+</header>
+
+<!-- Chat area -->
+<div class="chat-container" id="chatContainer">
+
+  <!-- Welcome screen -->
+  <div class="welcome" id="welcomeScreen">
+    <div class="welcome-title">Hello. I'm your<br><span>Document Parser.</span></div>
+    <div class="welcome-sub">
+      Say hi or ask me anything to get started. When you're ready, attach a PDF or image and
+      I'll run it through the parsing API and show the extracted output here.
+      Supported formats: PDF, JPG, JPEG, PNG, and WEBP.
+    </div>
+  </div>
+
+  <!-- Messages will appear here -->
+  <div id="messages"></div>
+
+</div>
+
+<!-- Input area -->
+<div class="input-area">
+  <div class="input-inner">
+    <input
+      id="fileInput"
+      type="file"
+      accept=".pdf,image/png,image/jpeg,image/jpg,image/webp"
+      hidden
+      onchange="handleFileSelected(event)"
+    >
+
+    <div class="input-row">
+      <button class="attach-btn" id="attachBtn" type="button" onclick="openFilePicker()">SELECT FILE</button>
+      <textarea
+        id="messageInput"
+        placeholder="Message the agent, or attach a file to parse..."
+        rows="1"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendDocument()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--bg)" stroke-width="2.5" stroke-linecap="round">
+          <path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="selected-file" id="selectedFile">No file attached — chat or attach a file.</div>
+
+    <div class="input-hint">DOCUMENT PARSER · GET / · POST /upload · POST /chat</div>
+  </div>
+</div>
+
+<script>
+  // ── Config ──────────────────────────────────────────────────────────────────
+  const API_BASE = window.location.protocol === "file:"
+    ? "http://localhost:5000"
+    : window.location.origin;
+  const UPLOAD_URL = `${API_BASE}/upload`;
+  const CHAT_URL = `${API_BASE}/chat`;
+  let isLoading = false;
+  let selectedFile = null;
+  let chatHistory = [];
+
+  // ── Auto resize textarea ─────────────────────────────────────────────────────
+  function autoResize(el) {
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  }
+
+  // ── Key handler ──────────────────────────────────────────────────────────────
+  function handleKey(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendCurrentAction();
+    }
+  }
+
+  function openFilePicker() {
+    if (isLoading) return;
+    document.getElementById("fileInput").click();
+  }
+
+  function handleFileSelected(event) {
+    const [file] = event.target.files || [];
+    if (!file) return;
+
+    if (!isSupportedFile(file)) {
+      event.target.value = "";
+      selectedFile = null;
+      updateSelectedFile();
+      appendError("Only PDF, JPG, JPEG, PNG, and WEBP files are supported.");
+      return;
+    }
+
+    selectedFile = file;
+    updateSelectedFile();
+    sendUpload();
+  }
+
+  async function sendCurrentAction() {
+    if (selectedFile) {
+      await sendUpload();
+      return;
+    }
+
+    await sendChat();
+  }
+
+  // ── Upload document ──────────────────────────────────────────────────────────
+  async function sendUpload() {
+    const input = document.getElementById("messageInput");
+    const note = input.value.trim();
+
+    if (isLoading) return;
+    if (!selectedFile) {
+      appendError("Select a PDF or image first.");
+      return;
+    }
+
+    document.getElementById("welcomeScreen").style.display = "none";
+
+    appendMessage("user", buildUploadSummary(selectedFile, note));
+
+    input.value = "";
+    input.style.height = "auto";
+
+    const typingId = showTyping();
+    setLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      if (note) {
+        formData.append("message", note);
+      }
+
+      const response = await fetch(UPLOAD_URL, { method: "POST", body: formData });
+      const data = await parseResponse(response);
+
+      removeTyping(typingId);
+
+      if (!response.ok) {
+        appendError(extractErrorMessage(data));
+        return;
+      }
+
+      appendMessage("agent", extractPrimaryText(data), data);
+      if (note) {
+        chatHistory.push({ role: "user", content: note });
+      }
+      chatHistory.push({ role: "assistant", content: extractPrimaryText(data) });
+      clearSelectedFile();
+      updateSelectedFile();
+
+    } catch (err) {
+      removeTyping(typingId);
+      appendError(`Cannot reach backend at ${UPLOAD_URL}. Is the parser service running?`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Send chat message ───────────────────────────────────────────────────────
+  async function sendChat() {
+    const input = document.getElementById("messageInput");
+    const message = input.value.trim();
+
+    if (isLoading) return;
+    if (!message) {
+      appendError("Type a message to start the conversation.");
+      return;
+    }
+
+    document.getElementById("welcomeScreen").style.display = "none";
+    appendMessage("user", message);
+    chatHistory.push({ role: "user", content: message });
+    input.value = "";
+    input.style.height = "auto";
+
+    const typingId = showTyping();
+    setLoading(true);
+
+    try {
+      const response = await fetch(CHAT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: chatHistory }),
+      });
+      const data = await parseResponse(response);
+
+      removeTyping(typingId);
+
+      if (!response.ok) {
+        appendError(extractErrorMessage(data));
+        return;
+      }
+
+      const assistantMessage = extractPrimaryText(data);
+      appendMessage("agent", assistantMessage, data);
+      chatHistory.push({ role: "assistant", content: assistantMessage });
+    } catch (err) {
+      removeTyping(typingId);
+      chatHistory.pop();
+      appendError(`Cannot reach backend at ${CHAT_URL}. Is the parser service running?`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Append message ───────────────────────────────────────────────────────────
+  function appendMessage(role, text, payload = null) {
+    const messages = document.getElementById("messages");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "message-wrapper";
+
+    const msg = document.createElement("div");
+    msg.className = "message";
+
+    const header = document.createElement("div");
+    header.className = "message-header";
+
+    const avatar = document.createElement("div");
+    avatar.className = `avatar ${role}`;
+    avatar.textContent = role === "agent" ? "DP" : "YOU";
+
+    const name = document.createElement("div");
+    name.className = "sender-name";
+    name.textContent = role === "agent" ? "DOCUMENT PARSER" : "YOU";
+
+    header.appendChild(avatar);
+    header.appendChild(name);
+
+    const bubble = document.createElement("div");
+    bubble.className = `message-bubble ${role}`;
+    bubble.innerHTML = formatText(text);
+
+    msg.appendChild(header);
+    msg.appendChild(bubble);
+
+    if (role === "agent" && payload && typeof payload === "object") {
+      const resultCard = document.createElement("div");
+      resultCard.className = "result-card";
+      const resultPre = document.createElement("pre");
+      resultPre.textContent = JSON.stringify(payload, null, 2);
+      resultCard.appendChild(resultPre);
+      msg.appendChild(resultCard);
+    }
+
+    wrapper.appendChild(msg);
+    messages.appendChild(wrapper);
+    scrollToBottom();
+  }
+
+  // ── Append error ─────────────────────────────────────────────────────────────
+  function appendError(text) {
+    const messages = document.getElementById("messages");
+    const wrapper  = document.createElement("div");
+    wrapper.className = "message-wrapper";
+    const err = document.createElement("div");
+    err.className = "error-bubble";
+    err.textContent = `⚠ ${text}`;
+    wrapper.appendChild(err);
+    messages.appendChild(wrapper);
+    scrollToBottom();
+  }
+
+  // ── Typing indicator ─────────────────────────────────────────────────────────
+  function showTyping() {
+    const messages = document.getElementById("messages");
+    const wrapper  = document.createElement("div");
+    const id       = "typing-" + Date.now();
+    wrapper.id     = id;
+    wrapper.className = "message-wrapper";
+
+    const header = document.createElement("div");
+    header.className = "message-header";
+    const avatar = document.createElement("div");
+    avatar.className = "avatar agent";
+    avatar.textContent = "DP";
+    const name = document.createElement("div");
+    name.className = "sender-name";
+    name.textContent = "DOCUMENT PARSER";
+    header.appendChild(avatar);
+    header.appendChild(name);
+
+    const typing = document.createElement("div");
+    typing.className = "typing";
+    typing.innerHTML = "<span></span><span></span><span></span>";
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(typing);
+    messages.appendChild(wrapper);
+    scrollToBottom();
+    return id;
+  }
+
+  function removeTyping(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+  }
+
+  function updateSelectedFile() {
+    const selectedFileLabel = document.getElementById("selectedFile");
+    if (selectedFile) {
+      selectedFileLabel.textContent = `READY: ${selectedFile.name} (${formatFileSize(selectedFile.size)})`;
+      return;
+    }
+
+    if (chatHistory.length > 0) {
+      selectedFileLabel.textContent = "CHAT ACTIVE: no file attached";
+      return;
+    }
+
+    selectedFileLabel.textContent = "No file attached — chat or attach a file.";
+  }
+
+  function clearSelectedFile() {
+    selectedFile = null;
+    document.getElementById("fileInput").value = "";
+    updateSelectedFile();
+  }
+
+  function isSupportedFile(file) {
+    const name = file.name.toLowerCase();
+    return name.endsWith(".pdf") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".webp");
+  }
+
+  function buildUploadSummary(file, note) {
+    const parts = [
+      `Uploaded ${file.name}`,
+      `Size: ${formatFileSize(file.size)}`,
+      `Type: ${file.type || "unknown"}`,
+    ];
+
+    if (note) {
+      parts.push(`Instruction: ${note}`);
+    }
+
+    return parts.join("\n");
+  }
+
+  async function parseResponse(response) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      return response.json();
+    }
+    return response.text();
+  }
+
+  function extractPrimaryText(data) {
+    if (typeof data === "string") {
+      return data;
+    }
+
+    if (data.message && typeof data.message === "string") {
+      return data.message;
+    }
+
+    if (data.text && typeof data.text === "string") {
+      return data.text;
+    }
+
+    if (data.content && typeof data.content === "string") {
+      return data.content;
+    }
+
+    return "Parsing complete.";
+  }
+
+  function extractErrorMessage(data) {
+    if (typeof data === "string") {
+      return data;
+    }
+
+    return data.detail || data.error || data.message || "Something went wrong. Please try again.";
+  }
+
+  function formatFileSize(size) {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  function formatText(text) {
+    let formatted = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Extract code blocks first to avoid replacing \n with <br> inside them
+    const codeBlocks = [];
+    formatted = formatted.replace(/```[a-z]*\n?([\s\S]*?)```/g, function(match, p1) {
+      codeBlocks.push(p1);
+      return `%%%BLOCK${codeBlocks.length - 1}%%%`;
+    });
+
+    formatted = formatted
+      .replace(/\n/g, "<br>")
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+
+    // Restore code blocks with a clean monospace pre block
+    formatted = formatted.replace(/%%%BLOCK(\d+)%%%/g, function(match, p1) {
+      return `<div style="background: var(--bg); padding: 12px; border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; margin: 8px 0;"><pre style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-mid); line-height: 1.5; margin: 0;">${codeBlocks[p1]}</pre></div>`;
+    });
+
+    return formatted;
+  }
+  function setLoading(val) {
+    isLoading = val;
+    document.getElementById("sendBtn").disabled = val;
+    document.getElementById("attachBtn").disabled = val;
+  }
+
+  function scrollToBottom() {
+    const container = document.getElementById("chatContainer");
+    container.scrollTop = container.scrollHeight;
+  }
+</script>
+</body>
+</html>
