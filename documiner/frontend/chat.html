@@ -361,6 +361,42 @@
     word-break: break-word;
   }
 
+  /* Parsing summary */
+  .summary-card {
+    margin-top: 12px;
+    padding: 14px 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .summary-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+
+  .summary-row:last-child { border-bottom: none; }
+
+  .summary-key {
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .summary-val {
+    color: var(--text);
+    text-align: right;
+    word-break: break-word;
+  }
+
+  .summary-val.ok { color: var(--accent); }
+  .summary-val.warn { color: var(--warning); }
+
   textarea {
     flex: 1;
     background: var(--bg);
@@ -589,7 +625,7 @@
         return;
       }
 
-      appendMessage("agent", extractPrimaryText(data), data);
+      appendMessage("agent", "Document parsing completed.", data);
       if (note) {
         chatHistory.push({ role: "user", content: note });
       }
@@ -641,7 +677,7 @@
       }
 
       const assistantMessage = extractPrimaryText(data);
-      appendMessage("agent", assistantMessage, data);
+      appendMessage("agent", assistantMessage);
       chatHistory.push({ role: "assistant", content: assistantMessage });
     } catch (err) {
       removeTyping(typingId);
@@ -684,17 +720,89 @@
     msg.appendChild(bubble);
 
     if (role === "agent" && payload && typeof payload === "object") {
-      const resultCard = document.createElement("div");
-      resultCard.className = "result-card";
-      const resultPre = document.createElement("pre");
-      resultPre.textContent = JSON.stringify(payload, null, 2);
-      resultCard.appendChild(resultPre);
-      msg.appendChild(resultCard);
+      msg.appendChild(buildSummaryCard(payload));
+      msg.appendChild(buildDownloadButton(payload));
     }
 
     wrapper.appendChild(msg);
     messages.appendChild(wrapper);
     scrollToBottom();
+  }
+
+  // ── Parsing summary + download ───────────────────────────────────────────────
+  function extractSummaryRows(data) {
+    const doc = (data && data.document) ? data.document : data;
+    const notes = (doc && doc.NOTES) || {};
+    const grounding = (doc && doc.GROUNDING) || {};
+    const prep = notes.image_preprocessing || {};
+    const pii = notes.pii_detector || {};
+
+    const imageName = (data && data.filename) || "document";
+    const piiDetected = String(pii.pii_detected || "").toUpperCase() === "TRUE";
+    const clarity = prep.comments
+      ? prep.comments.replace(/^Clarity:\s*/i, "")
+      : "Unknown";
+    const size = prep.image_dims
+      || (grounding.width && grounding.height ? `${grounding.width}x${grounding.height}` : "Unknown");
+
+    const rows = [
+      { key: "Image name", val: imageName },
+      { key: "PII detected", val: piiDetected ? "Yes ⚠" : "No!", tone: piiDetected ? "warn" : "ok" },
+      { key: "Clarity", val: clarity },
+      { key: "Size", val: size },
+    ];
+    if (notes.effort) rows.push({ key: "Effort", val: notes.effort });
+    if (notes.parsing_duration_ms != null) {
+      rows.push({ key: "Parse time", val: `${(notes.parsing_duration_ms / 1000).toFixed(1)}s` });
+    }
+    return rows;
+  }
+
+  function buildSummaryCard(data) {
+    const card = document.createElement("div");
+    card.className = "summary-card";
+
+    for (const row of extractSummaryRows(data)) {
+      const line = document.createElement("div");
+      line.className = "summary-row";
+
+      const key = document.createElement("span");
+      key.className = "summary-key";
+      key.textContent = row.key;
+
+      const val = document.createElement("span");
+      val.className = "summary-val" + (row.tone ? ` ${row.tone}` : "");
+      val.textContent = row.val;
+
+      line.appendChild(key);
+      line.appendChild(val);
+      card.appendChild(line);
+    }
+
+    return card;
+  }
+
+  function buildDownloadButton(data) {
+    const name = (data && data.filename) || "document";
+    const payload = (data && data.document) ? data.document : data;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "download-btn";
+    btn.textContent = "⭳ DOWNLOAD JSON";
+    btn.addEventListener("click", () => downloadJson(payload, name));
+    return btn;
+  }
+
+  function downloadJson(data, name) {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${name.replace(/\.[^.]+$/, "")}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   }
 
   // ── Append error ─────────────────────────────────────────────────────────────
