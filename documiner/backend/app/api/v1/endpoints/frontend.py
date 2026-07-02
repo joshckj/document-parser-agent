@@ -16,7 +16,7 @@ router = APIRouter()
 OCR_BASE = os.getenv("OCR_BASE", "https://sp-doc-insight.qa.in.spdigital.sg")
 TIMEOUT = 60.0
 SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
-ORCHESTRATOR_FILE = Path(__file__).resolve().parents[3] / "orchestrator" / "agent " / "orchestrator.py"
+ORCHESTRATOR_FILE = Path(__file__).resolve().parents[3] / "orchestrator" / "agent" / "orchestrator.py"
 
 
 class ChatMessage(BaseModel):

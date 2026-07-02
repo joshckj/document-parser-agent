@@ -1,10 +1,28 @@
-fastapi
-httpx
-langchain>=0.2
-langchain-core>=0.2
-langchain-openai>=0.1
-pydantic>=2
-pydantic-settings
-python-dotenv
-python-multipart
-uvicorn[standard]
+# --- Web Framework & Server ---
+fastapi==0.136.1
+gunicorn==23.0.0
+uvicorn[standard]==0.38.0
+httpx==0.28.1
+python-dotenv==1.2.1
+starlette==1.0.0
+
+# --- Data & Validation ---
+pydantic==2.12.4
+pydantic-settings==2.14.0
+pandas==2.3.3
+numpy==2.4.4
+python-multipart==0.0.28
+h3>=3.7.7
+
+# --- AI & Agent Frameworks ---
+deepagents==0.5.6
+langgraph==1.1.10
+langgraph-checkpoint-postgres==3.0.5
+langchain==1.2.15
+langchain-openai==1.1.9
+openai==2.8.1
+
+# --- Monitoring & Cloud ---
+langfuse==3.10.6
+ddtrace
+

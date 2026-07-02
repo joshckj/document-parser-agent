@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
 
@@ -12,10 +11,9 @@ _ORCHESTRATOR_DIR = _AGENT_DIR.parent
 if str(_ORCHESTRATOR_DIR) not in sys.path:
     sys.path.insert(0, str(_ORCHESTRATOR_DIR))
 
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.prebuilt import create_react_agent
 
 from tools.call_parser_api import call_ocr_api
 
@@ -40,21 +38,14 @@ _SYSTEM_PROMPT = _load_system_prompt()
 _TOOLS = [call_ocr_api]
 
 
-def _build_executor(model: str, api_key: str, base_url: str) -> AgentExecutor:
+def _build_agent(model: str, api_key: str, base_url: str):
     llm = ChatOpenAI(
         model=model,
         api_key=api_key,
         base_url=base_url,
         temperature=0.3,
     )
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", _SYSTEM_PROMPT),
-        MessagesPlaceholder("chat_history"),
-        ("human", "{input}"),
-        MessagesPlaceholder("agent_scratchpad"),
-    ])
-    agent = create_tool_calling_agent(llm, _TOOLS, prompt)
-    return AgentExecutor(agent=agent, tools=_TOOLS, verbose=True)
+    return create_react_agent(llm, _TOOLS, prompt=_SYSTEM_PROMPT)
 
 
 async def invoke_deep_agent(
@@ -64,19 +55,15 @@ async def invoke_deep_agent(
     agent_base_url: str,
 ) -> str:
     """Invoke the orchestrator with a chat history and return the reply."""
-    executor = _build_executor(agent_model, agent_key, agent_base_url)
+    agent = _build_agent(agent_model, agent_key, agent_base_url)
 
-    chat_history: list[Any] = []
-    for m in messages[:-1]:
+    lc_messages: list[HumanMessage | AIMessage] = []
+    for m in messages:
         if m["role"] == "user":
-            chat_history.append(HumanMessage(content=m["content"]))
+            lc_messages.append(HumanMessage(content=m["content"]))
         elif m["role"] == "assistant":
-            chat_history.append(AIMessage(content=m["content"]))
+            lc_messages.append(AIMessage(content=m["content"]))
 
-    last_input = messages[-1]["content"] if messages else ""
-
-    result = await executor.ainvoke({
-        "input": last_input,
-        "chat_history": chat_history,
-    })
-    return result.get("output", "")
+    result = await agent.ainvoke({"messages": lc_messages})
+    last = result["messages"][-1]
+    return last.content if hasattr(last, "content") else str(last)
